@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Orchestrator CLI tool for ruff fixes with Factory AI droids"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "pytest>=9.0.2",
+]
 
 [project.scripts]
 ruff-droids = "ruff_droids.cli:main"
