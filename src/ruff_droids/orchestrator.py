@@ -122,7 +122,7 @@ def _build_droid_prompt(unit: dict) -> str:
     return "\n".join(lines)
 
 
-def _exec_droid_unit(target_dir: str, unit: dict, unit_index: int) -> tuple[int, dict]:
+def _exec_droid_unit(target_dir: str, unit: dict, _unit_index: int) -> tuple[int, dict]:
     """Run a single droid exec for one work unit, with exponential backoff on failure."""
     prompt = _build_droid_prompt(unit)
 
