@@ -10,6 +10,14 @@ from .orchestrator import run_lint_fix
 
 def main() -> None:
     """Parse arguments, set up Factory auth, and delegate to the orchestrator."""
+    try:
+        _run()
+    except KeyboardInterrupt:
+        print("\n[ruff-droids] Interrupted. Exiting.")
+        sys.exit(130)
+
+
+def _run() -> None:
     parser = argparse.ArgumentParser(
         prog="ruff-droids",
         description="Run ruff auto-fixes and delegate remaining lint issues to Factory AI droids.",

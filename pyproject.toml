@@ -1,6 +1,6 @@
 [project]
 name = "ruff-droids"
-version = "0.1.0"
+version = "0.1.1"
 description = "Orchestrator CLI tool for ruff fixes with Factory AI droids"
 readme = "README.md"
 requires-python = ">=3.10"
