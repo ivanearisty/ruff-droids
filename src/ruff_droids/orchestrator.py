@@ -114,14 +114,24 @@ def build_work_units(violations: list[dict]) -> list[dict]:
 
 def _build_droid_prompt(unit: dict) -> str:
     """Build a natural-language prompt for `droid exec` from a work unit."""
-    lines = [f"Fix the following ruff lint violations in {unit['file']}:\n"]
+    codes_csv = ",".join(unit["codes"])
+    filepath = unit["file"]
+
+    lines = [
+        "IMPORTANT: You are assigned ONLY the violations listed below. "
+        "Do NOT fix, modify, or address any other issues in the file. "
+        "Do NOT add docstrings, type annotations, imports, or any other changes "
+        "unless they are explicitly listed below. "
+        "Leave everything else exactly as-is.\n",
+        f"File: {filepath}",
+        f"Scope: {unit['scope']}\n",
+        "Violations to fix (and NOTHING else):",
+    ]
     for v in unit["violations"]:
         loc = v.get("location", {})
         lines.append(f"  - {v['code']} (line {loc.get('row', '?')}): {v['message']}")
     lines.append(
-        "\nEdit the file to resolve each violation. "
-        "Run `uvx ruff check --select " + ",".join(unit["codes"]) + " " + unit["file"] + "` "
-        "to verify the fixes.",
+        f"\nVerify with: `uvx ruff check --select {codes_csv} {filepath}`",
     )
     return "\n".join(lines)
 
