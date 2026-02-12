@@ -3,6 +3,7 @@
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from .orchestrator import run_lint_fix
 
@@ -18,7 +19,7 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=4, help="Number of parallel droid-exec workers (default: 4)")
     args = parser.parse_args()
 
-    target = os.path.abspath(args.path)
+    target = str(Path(args.path).resolve())
 
     # 1) Set Factory auth
     api_key: str | None = args.factory_api_key or os.getenv("FACTORY_API_KEY")

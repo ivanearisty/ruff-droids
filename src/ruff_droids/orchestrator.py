@@ -2,6 +2,7 @@
 
 import ast
 import json
+import shutil
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -10,19 +11,22 @@ from pathlib import Path
 MAX_RETRIES = 5
 BACKOFF_BASE = 1.0  # seconds
 
+# Resolve full executable paths once at module load (S607)
+_UVX_PATH = shutil.which("uvx") or "uvx"
+
 
 def run_ruff(target_dir: str) -> list[dict]:
     """Run ruff --fix, then collect remaining violations as JSON."""
     # First pass: auto-fix what ruff can handle on its own
-    subprocess.run(
-        ["uvx", "ruff", "check", "--fix", target_dir],
+    subprocess.run(  # noqa: S603
+        [_UVX_PATH, "ruff", "check", "--fix", target_dir],
         capture_output=True,
         check=False,
     )
 
     # Second pass: report whatever is left
-    res = subprocess.run(
-        ["uvx", "ruff", "check", "--output-format", "json", target_dir],
+    res = subprocess.run(  # noqa: S603
+        [_UVX_PATH, "ruff", "check", "--output-format", "json", target_dir],
         capture_output=True,
         text=True,
         check=False,
@@ -117,7 +121,7 @@ def _build_droid_prompt(unit: dict) -> str:
     lines.append(
         "\nEdit the file to resolve each violation. "
         "Run `uvx ruff check --select " + ",".join(unit["codes"]) + " " + unit["file"] + "` "
-        "to verify the fixes."
+        "to verify the fixes.",
     )
     return "\n".join(lines)
 
@@ -135,7 +139,7 @@ def _exec_droid_unit(target_dir: str, unit: dict, _unit_index: int) -> tuple[int
     ]
 
     for attempt in range(MAX_RETRIES):
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # noqa: S603
         if result.returncode == 0:
             return 0, unit
 

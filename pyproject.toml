@@ -24,6 +24,7 @@ ignore = [
   "D203",
   "D213",
   "S101",
+  "T201"
 ]
 
 [dependency-groups]
