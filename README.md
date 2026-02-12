@@ -21,5 +21,3 @@ ruff-droids --path /your/project
 | `--path` | `.` | Target directory |
 | `--factory-api-key` | `FACTORY_API_KEY` env | Factory API key |
 | `--concurrency` | `4` | Parallel droid workers |
-
-Auth falls back to `droid auth login` if no key is provided.
