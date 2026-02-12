@@ -16,7 +16,8 @@ def run_ruff(target_dir: str) -> list[dict]:
     # First pass: auto-fix what ruff can handle on its own
     subprocess.run(
         ["uvx", "ruff", "check", "--fix", target_dir],
-        check=False,  # non-zero exit is expected when violations remain
+        capture_output=True,
+        check=False,
     )
 
     # Second pass: report whatever is left
@@ -79,7 +80,6 @@ def build_work_units(violations: list[dict]) -> list[dict]:
     one droid.  Violations in different scopes (even in the same file) become
     separate work units so they can run in parallel without conflicts.
     """
-    # Group violations by file first
     by_file: dict[str, list[dict]] = {}
     for v in violations:
         by_file.setdefault(v.get("filename", ""), []).append(v)
@@ -89,7 +89,6 @@ def build_work_units(violations: list[dict]) -> list[dict]:
     for filepath, file_violations in by_file.items():
         scope_map = _build_scope_map(filepath)
 
-        # Sub-group by scope within the file
         by_scope: dict[str, list[dict]] = {}
         for v in file_violations:
             line = v.get("location", {}).get("row", 0)
@@ -97,42 +96,57 @@ def build_work_units(violations: list[dict]) -> list[dict]:
             by_scope.setdefault(scope, []).append(v)
 
         for scope, scope_violations in by_scope.items():
-            codes = ", ".join(sorted({v.get("code", "?") for v in scope_violations}))
+            codes = sorted({v.get("code", "?") for v in scope_violations})
             work_units.append({
                 "file": filepath,
                 "scope": scope,
+                "codes": codes,
                 "violations": scope_violations,
-                "description": f"Fix {len(scope_violations)} violation(s) [{codes}] in {filepath}:{scope}",
+                "description": f"Fix {len(scope_violations)} violation(s) [{', '.join(codes)}] in {filepath}:{scope}",
             })
 
     return work_units
 
 
+def _build_droid_prompt(unit: dict) -> str:
+    """Build a natural-language prompt for `droid exec` from a work unit."""
+    lines = [f"Fix the following ruff lint violations in {unit['file']}:\n"]
+    for v in unit["violations"]:
+        loc = v.get("location", {})
+        lines.append(f"  - {v['code']} (line {loc.get('row', '?')}): {v['message']}")
+    lines.append(
+        "\nEdit the file to resolve each violation. "
+        "Run `uvx ruff check --select " + ",".join(unit["codes"]) + " " + unit["file"] + "` "
+        "to verify the fixes."
+    )
+    return "\n".join(lines)
+
+
 def _exec_droid_unit(target_dir: str, unit: dict, unit_index: int) -> tuple[int, dict]:
     """Run a single droid exec for one work unit, with exponential backoff on failure."""
-    unit_path = Path(target_dir) / f".factory_ruff_unit_{unit_index}.json"
-    unit_path.write_text(json.dumps(unit))
+    prompt = _build_droid_prompt(unit)
 
     cmd = [
-        "droid",
-        "exec",
-        "--auto",
-        "medium",
-        "--",
-        "python",
-        "-m",
-        "ruff_droids.worker",
-        str(unit_path),
+        "droid", "exec",
+        "--auto", "medium",
+        "--cwd", target_dir,
+        "-o", "json",
+        prompt,
     ]
 
     for attempt in range(MAX_RETRIES):
-        result = subprocess.run(cmd, cwd=target_dir, capture_output=True, text=True, check=False)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if result.returncode == 0:
             return 0, unit
 
         delay = BACKOFF_BASE * (2 ** attempt)
+        print(
+            f"  [retry] {unit['description']} failed (attempt {attempt + 1}/{MAX_RETRIES}), "
+            f"retrying in {delay:.1f}s...",
+        )
         time.sleep(delay)
 
+    print(f"  [failed] {unit['description']} — exhausted {MAX_RETRIES} retries")
     return 1, unit
 
 
@@ -148,31 +162,38 @@ def run_droid_exec(target_dir: str, work_units: list[dict], *, concurrency: int 
         for future in as_completed(futures):
             returncode, unit = future.result()
             if returncode == 0:
-                pass
+                print(f"  [done] {unit['description']}")
             else:
                 failed.append(unit)
 
     if failed:
-        for _u in failed:
-            pass
+        print(f"\n[ruff-droids] {len(failed)} work unit(s) failed:")
+        for u in failed:
+            print(f"  - {u['description']}")
         return 1
     return 0
 
 
 def run_lint_fix(target_dir: str, *, concurrency: int = 4) -> int:
     """Top-level flow: ruff auto-fix -> collect remaining violations -> confirm -> droid exec."""
+    print(f"[ruff-droids] Running ruff --fix on {target_dir} ...")
     violations = run_ruff(target_dir)
 
     if not violations:
+        print("[ruff-droids] No remaining violations after auto-fix. Done!")
         return 0
 
     work_units = build_work_units(violations)
 
-    for _u in work_units:
-        pass
+    print(f"\n[ruff-droids] Found {len(violations)} linter violation(s), "
+          f"will spin up {len(work_units)} droid(s) to fix them.\n")
+    for u in work_units:
+        print(f"  - {u['description']}")
 
     answer = input("\nWould you like to continue? [y/N] ").strip().lower()
     if answer not in ("y", "yes"):
+        print("[ruff-droids] Aborted.")
         return 1
 
+    print(f"\n[ruff-droids] Dispatching {len(work_units)} droid(s) (concurrency={concurrency}) ...")
     return run_droid_exec(target_dir, work_units, concurrency=concurrency)
