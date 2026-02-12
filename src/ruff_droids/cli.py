@@ -2,7 +2,6 @@
 
 import argparse
 import os
-import subprocess
 import sys
 
 from .orchestrator import run_lint_fix
@@ -24,9 +23,11 @@ def main() -> None:
     # 1) Set Factory auth
     api_key: str | None = args.factory_api_key or os.getenv("FACTORY_API_KEY")
     if not api_key:
-        subprocess.run(["droid", "auth", "login"], check=True)
-    else:
-        os.environ["FACTORY_API_KEY"] = api_key
+        api_key = input("Enter your Factory API key: ").strip()
+        if not api_key:
+            print("Error: Factory API key is required.")
+            sys.exit(1)
+    os.environ["FACTORY_API_KEY"] = api_key
 
     # 2) Delegate to orchestrator
     sys.exit(run_lint_fix(target, concurrency=args.concurrency))
